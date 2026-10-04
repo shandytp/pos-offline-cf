@@ -85,6 +85,33 @@ export async function connectBluetooth() {
       const BREATHE_EVERY = 3000, BREATHE_MS = 700;
       const writeOnce = (part) => (ch.properties.writeWithoutResponse ? ch.writeValueWithoutResponse(part) : ch.writeValue(part));
 
+      // writeValueWithoutResponse gives no acknowledgment, so when it throws we genuinely do not
+      // know how many bytes of that chunk already reached the printer over the air. Resuming at
+      // the same offset risked re-sending (duplicating) bytes that had partially landed — that
+      // silently shifted/corrupted the image from that point on, identically every time since the
+      // same receipt bytes hit the same failure point. The only safe move is a full restart with
+      // a smaller chunk size, not "carry on from here".
+      const attemptSend = async (chunkSize) => {
+        let i = 0, lastLoggedAt = 0, sinceBreathe = 0;
+        while (i < data.length) {
+          if (!device.gatt.connected) throw new Error(`Printer putus koneksi di byte ${i}/${data.length} (buffer kebanjiran / kehabisan daya?)`);
+          const part = data.slice(i, i + chunkSize);
+          await writeOnce(part); // let it throw straight up to attemptSend's caller — no resume-in-place
+          i += part.length;
+          sinceBreathe += part.length;
+          if (i - lastLoggedAt >= 2000 || i >= data.length) {
+            log(`${i}/${data.length} byte terkirim…`);
+            lastLoggedAt = i;
+          }
+          if (sinceBreathe >= BREATHE_EVERY && i < data.length) {
+            sinceBreathe = 0;
+            await sleep(BREATHE_MS); // let the print head catch up before the buffer fills again
+          } else {
+            await sleep(DELAY);
+          }
+        }
+      };
+
       // Different clone chipsets cap writes differently: some ("cat printer" boards) take
       // 200 bytes fine, others (plain BLE-UART bridges like HM-10/ff00, no MTU negotiated)
       // reject anything over the default ~20-byte ATT MTU. Step down instead of jumping
@@ -93,44 +120,26 @@ export async function connectBluetooth() {
       const STEPS = [200, 100, 50, 20];
       let stepIdx = Math.max(0, STEPS.indexOf(this.chunkSize || loadKnownChunk()));
       if (stepIdx === -1) stepIdx = 0;
-      let chunkSize = STEPS[stepIdx];
-      let i = 0;
-      let lastLoggedAt = 0;
-      let sinceBreathe = 0;
-      while (i < data.length) {
-        if (!device.gatt.connected) throw new Error(`Printer putus koneksi di byte ${i}/${data.length} (buffer kebanjiran / kehabisan daya?)`);
-        const part = data.slice(i, i + chunkSize);
+
+      for (;;) {
+        const chunkSize = STEPS[stepIdx];
         try {
-          await writeOnce(part);
+          await attemptSend(chunkSize);
         } catch (e) {
           if (stepIdx >= STEPS.length - 1) {
             log(`Gagal kirim walau chunk sudah kecil (${chunkSize} byte): ${e.message}`, 'error');
             throw e;
           }
           stepIdx++;
-          chunkSize = STEPS[stepIdx];
-          this.chunkSize = chunkSize;
-          saveKnownChunk(chunkSize);
-          log(`Write ${part.length} byte ditolak printer (${e.message}), turunin ke chunk ${chunkSize} byte dan ulang dari sini…`, 'error');
-          await sleep(100);
-          continue; // retry this same offset with the smaller chunk size
+          log(`Gagal di chunk ${chunkSize} byte (${e.message}) — ulang dari AWAL pake chunk ${STEPS[stepIdx]} byte (gak aman lanjut dari tengah, writeWithoutResponse gak kasih tau berapa byte yang kadung nyampe)…`, 'error');
+          await sleep(150);
+          continue;
         }
-        i += part.length;
-        sinceBreathe += part.length;
-        if (i - lastLoggedAt >= 2000 || i >= data.length) {
-          log(`${i}/${data.length} byte terkirim…`);
-          lastLoggedAt = i;
-        }
-        if (sinceBreathe >= BREATHE_EVERY && i < data.length) {
-          sinceBreathe = 0;
-          await sleep(BREATHE_MS); // let the print head catch up before the buffer fills again
-        } else {
-          await sleep(DELAY);
-        }
+        this.chunkSize = chunkSize;
+        saveKnownChunk(chunkSize); // remember what worked, so the next connection starts here instead of probing from 200
+        log(`Semua ${data.length} byte terkirim ke printer (chunk ${chunkSize} byte)`);
+        return;
       }
-      this.chunkSize = chunkSize;
-      saveKnownChunk(chunkSize); // remember what worked, so the next connection starts here instead of probing from 200
-      log(`Semua ${data.length} byte terkirim ke printer (chunk ${chunkSize} byte)`);
     },
     close: () => device.gatt.disconnect(),
   };
