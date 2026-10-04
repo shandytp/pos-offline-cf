@@ -197,14 +197,14 @@ function openReceipt(trx) {
   $('#modal').hidden = false;
 }
 
-function encodeForPrint(receipt) {
+async function encodeForPrint(receipt) {
   const opts = { cut: state.settings.autoCut };
-  return state.settings.printMode === 'text' ? encodeEscPos(receipt, opts) : encodeEscPosRaster(receipt, state.settings, opts);
+  return state.settings.printMode === 'text' ? encodeEscPos(receipt, opts) : await encodeEscPosRaster(receipt, state.settings, opts);
 }
 
 async function printTrx(trx) {
   if (!printer.isConnected()) throw new Error('Printer belum terhubung. Hubungkan di Pengaturan, atau pakai "Cetak via sistem".');
-  await printer.print(encodeForPrint(buildReceipt(trx, state.settings)));
+  await printer.print(await encodeForPrint(buildReceipt(trx, state.settings)));
   toast('Struk dikirim ke printer');
 }
 
@@ -469,7 +469,7 @@ $('#connectBT').addEventListener('click', () => guard(async () => { await printe
 $('#connectUSB').addEventListener('click', () => guard(async () => { await printer.connectUSB(); toast('Printer USB terhubung'); }));
 $('#disconnectPrinter').addEventListener('click', () => guard(printer.disconnect));
 $('#testPrint').addEventListener('click', () => guard(async () => {
-  await printer.print(encodeForPrint(buildTestReceipt(state.settings)));
+  await printer.print(await encodeForPrint(buildTestReceipt(state.settings)));
   toast('Test print dikirim');
 }));
 

@@ -1,6 +1,22 @@
 const pad2 = (n) => String(n).padStart(2, '0');
 const num = (n) => Math.round(n || 0).toLocaleString('id-ID');
 
+// CSS "monospace" resolves to a different actual font per OS/browser (e.g. desktop Chrome vs
+// Android Chrome), with different character widths — that's what made printed layout look fine
+// on a laptop and "berantakan" on a phone: the same code, measuring a different font. Bundling
+// and loading one exact font file makes every device render byte-for-byte the same bitmap.
+const FONT_FAMILY = 'JetBrains Mono';
+let fontReady;
+function ensureFontLoaded() {
+  if (!fontReady) {
+    fontReady = Promise.all([
+      document.fonts.load(`700 16px "${FONT_FAMILY}"`),
+      document.fonts.load(`400 16px "${FONT_FAMILY}"`),
+    ]).catch((e) => console.warn('Gagal load font cetak, fallback ke font sistem', e));
+  }
+  return fontReady;
+}
+
 export function trxNo(t) {
   const d = new Date(t.date);
   return `${String(d.getFullYear()).slice(2)}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${String(t.id).padStart(5, '0')}`;
@@ -109,47 +125,64 @@ export function encodeEscPos({ ops }, { cut = false } = {}) {
 // Cheap BLE thermal printers (Phomemo T02/M02 and clones) have no font ROM — they only
 // understand raw raster bit images (ESC/POS "GS v 0"). Rendering to canvas first works on
 // every ESC/POS printer (raster is part of the spec), unlike plain ASCII text commands.
-function renderToCanvas({ ops, width: chars }, s) {
+async function renderToCanvas({ ops, width: chars }, s) {
+  await ensureFontLoaded();
   const dotsWidth = s.paper === '80' ? 576 : 384; // 203dpi: 384 dots = 48mm print area (confirmed T02 spec)
+
+  // 384 dots / 32 chars ≈ 12px per character — too small for a web font (no hinting tuned for
+  // that size) to stay crisp once thresholded to 1-bit. Different phones substitute a different
+  // "monospace" font with different small-size rendering, which is why sharpness varied by device.
+  // Fix: draw at SS× the size, then downscale with smoothing — the average of many supersampled
+  // pixels reconstructs the real glyph shape far better than rendering tiny text directly.
+  const SS = 4;
+  const bigWidth = dotsWidth * SS;
   const canvas = document.createElement('canvas');
-  canvas.width = dotsWidth;
+  canvas.width = bigWidth;
   const ctx = canvas.getContext('2d');
 
-  ctx.font = '24px monospace';
+  ctx.font = `${24 * SS}px "${FONT_FAMILY}", monospace`;
   const probeWidth = ctx.measureText('M'.repeat(chars)).width;
-  const fontSize = Math.max(8, Math.floor(24 * (dotsWidth / probeWidth)));
+  const fontSize = Math.max(8 * SS, Math.floor(24 * SS * (bigWidth / probeWidth)));
   // Tighter spacing than a screen UI would use: every extra row of pixels here is more bytes
   // over an already slow BLE link, and this only has to be legible on thermal paper, not pretty.
   const lineHeight = Math.round(fontSize * 1.2);
   const bigScale = 1.35;
-  const margin = 3;
+  const margin = 3 * SS;
 
-  let height = margin * 2;
-  for (const op of ops) height += Math.round(lineHeight * (op.big ? bigScale : 1));
-  canvas.height = height;
+  let bigHeight = margin * 2;
+  for (const op of ops) bigHeight += Math.round(lineHeight * (op.big ? bigScale : 1));
+  canvas.height = bigHeight;
 
   ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, dotsWidth, height);
+  ctx.fillRect(0, 0, bigWidth, bigHeight);
   ctx.fillStyle = '#000';
   ctx.textBaseline = 'top';
 
   let y = margin;
   for (const op of ops) {
     const size = Math.round(fontSize * (op.big ? bigScale : 1));
-    ctx.font = `${op.bold ? 'bold ' : ''}${size}px monospace`;
+    ctx.font = `${op.bold ? 'bold ' : ''}${size}px "${FONT_FAMILY}", monospace`;
     const text = op.text || '';
     const textWidth = ctx.measureText(text).width;
     let x = margin;
-    if (op.align === 'center') x = Math.max(margin, (dotsWidth - textWidth) / 2);
-    else if (op.align === 'right') x = Math.max(margin, dotsWidth - textWidth - margin);
+    if (op.align === 'center') x = Math.max(margin, (bigWidth - textWidth) / 2);
+    else if (op.align === 'right') x = Math.max(margin, bigWidth - textWidth - margin);
     ctx.fillText(text, x, y);
     y += Math.round(lineHeight * (op.big ? bigScale : 1));
   }
-  return canvas;
+
+  const out = document.createElement('canvas');
+  out.width = dotsWidth;
+  out.height = Math.round(bigHeight / SS);
+  const octx = out.getContext('2d');
+  octx.imageSmoothingEnabled = true;
+  octx.imageSmoothingQuality = 'high';
+  octx.drawImage(canvas, 0, 0, bigWidth, bigHeight, 0, 0, dotsWidth, out.height);
+  return out;
 }
 
-export function encodeEscPosRaster(receipt, s, { cut = false } = {}) {
-  const canvas = renderToCanvas(receipt, s);
+export async function encodeEscPosRaster(receipt, s, { cut = false } = {}) {
+  const canvas = await renderToCanvas(receipt, s);
   const { width: dotsWidth, height } = canvas;
   const { data } = canvas.getContext('2d').getImageData(0, 0, dotsWidth, height);
   const bytesPerRow = dotsWidth / 8;
@@ -166,7 +199,7 @@ export function encodeEscPosRaster(receipt, s, { cut = false } = {}) {
         for (let bit = 0; bit < 8; bit++) {
           const idx = (y * dotsWidth + bx * 8 + bit) * 4;
           const lum = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
-          if (lum < 180) byte |= 0x80 >> bit; // dark pixel -> dot printed (bit=1), MSB first
+          if (lum < 200) byte |= 0x80 >> bit; // dark pixel -> dot printed (bit=1), MSB first
         }
         out.push(byte);
       }

@@ -1,6 +1,6 @@
 // Bump this version on every deploy. Chrome only re-checks this file's bytes to detect
 // an update — if nothing here changes, it keeps serving the old cached app forever.
-const CACHE = 'pos-offline-v7';
+const CACHE = 'pos-offline-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const ASSETS = [
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './fonts/JetBrainsMono.woff2',
   './js/app.js',
   './js/db.js',
   './js/printer.js',

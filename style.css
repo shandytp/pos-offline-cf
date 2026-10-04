@@ -1,3 +1,13 @@
+/* Bundled locally (not a system/CDN font) so every device renders the printed receipt
+   identically — the generic "monospace" keyword resolves to a different actual font per
+   OS/browser, which is what made layout look fine on a laptop and broken on a phone. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('fonts/JetBrainsMono.woff2') format('woff2');
+  font-weight: 100 800;
+  font-display: swap;
+}
+
 :root {
   --bg: #f4f5f7;
   --card: #ffffff;
@@ -150,7 +160,7 @@ tr.void td:last-child { text-decoration: none; }
 .modal[hidden] { display: none; }
 .modal-box { background: #fff; border-radius: var(--radius); padding: 16px; max-height: 90vh; overflow: auto; display: flex; flex-direction: column; gap: 12px; align-items: center; }
 .receipt {
-  font-family: ui-monospace, "Courier New", monospace; font-size: 13px; line-height: 1.35;
+  font-family: 'JetBrains Mono', ui-monospace, "Courier New", monospace; font-size: 13px; line-height: 1.35;
   width: calc(var(--cols, 32) * 1ch + 24px); max-width: 100%;
   padding: 12px; background: #fff; border: 1px dashed #bbb; white-space: pre; overflow-x: auto;
 }
