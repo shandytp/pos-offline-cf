@@ -49,24 +49,29 @@ export async function connectBluetooth() {
   const services = await server.getPrimaryServices();
   log(`Ditemukan ${services.length} service: ${services.map((s) => s.uuid).join(', ') || '(kosong)'}`);
 
-  let ch = null, svcUuid = null;
+  // Scan every characteristic of every service (not just "first writable one found") and log
+  // its full property set — "writeWithoutResponse" is fire-and-forget (Android can silently
+  // drop/reorder bytes with zero JS error, which is what we've been chasing); "write" (with
+  // response) makes the browser wait for a real GATT ack from the printer before resolving,
+  // which is actually safe. Prefer a with-response characteristic whenever one exists.
+  const candidates = [];
   for (const svc of services) {
     const chars = await svc.getCharacteristics();
     log(`Service ${svc.uuid}: ${chars.length} characteristic (${chars.map((c) => c.uuid.slice(0, 8)).join(', ')})`);
     for (const c of chars) {
-      if (c.properties.write || c.properties.writeWithoutResponse) {
-        ch = c; svcUuid = svc.uuid;
-        log(`Characteristic tulis dipakai: ${c.uuid} (service ${svc.uuid}, writeWithoutResponse=${c.properties.writeWithoutResponse})`);
-        break;
-      }
+      const p = c.properties;
+      log(`  ${c.uuid}: read=${p.read} write=${p.write} writeWithoutResponse=${p.writeWithoutResponse} notify=${p.notify} indicate=${p.indicate}`);
+      if (p.write || p.writeWithoutResponse) candidates.push({ c, svc, withResponse: p.write });
     }
-    if (ch) break;
   }
-  if (!ch) {
+  const picked = candidates.find((x) => x.withResponse) || candidates[0];
+  if (!picked) {
     log('Tidak ada characteristic yang bisa ditulis di printer ini', 'error');
     device.gatt.disconnect();
     throw new Error('Characteristic printer tidak ditemukan. Printer mungkin bukan BLE / ESC/POS.');
   }
+  const ch = picked.c, svcUuid = picked.svc.uuid;
+  log(`Characteristic tulis dipakai: ${ch.uuid} (service ${svcUuid}, mode=${picked.withResponse ? 'write-with-response (ack asli)' : 'writeWithoutResponse (fire-and-forget)'})`);
   await disconnect();
   device.addEventListener('gattserverdisconnected', () => {
     log(`Printer "${device.name || ''}" terputus (gattserverdisconnected)`, 'error');
@@ -89,7 +94,9 @@ export async function connectBluetooth() {
       // drops the BLE connection to protect itself — exactly the "disconnects around byte
       // 12000" pattern. Stop every BREATHE_EVERY bytes and let it actually print/drain first.
       const BREATHE_EVERY = 3000, BREATHE_MS = 700;
-      const writeOnce = (part) => (ch.properties.writeWithoutResponse ? ch.writeValueWithoutResponse(part) : ch.writeValue(part));
+      // Prefer write-with-response: the Promise only resolves once the printer actually ACKs
+      // the GATT write, which is real backpressure instead of guessing a safe delay.
+      const writeOnce = (part) => (ch.properties.write ? ch.writeValue(part) : ch.writeValueWithoutResponse(part));
 
       // writeValueWithoutResponse gives no acknowledgment, so when it throws we genuinely do not
       // know how many bytes of that chunk already reached the printer over the air. Resuming at
