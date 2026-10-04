@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <title>POS Offline</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1 id="storeTitle">POS Offline</h1>
+    <button id="printerChip" class="chip">Printer: belum terhubung</button>
+  </header>
+
+  <nav class="tabs">
+    <button data-page="kasir" class="active">Kasir</button>
+    <button data-page="produk">Produk</button>
+    <button data-page="riwayat">Riwayat</button>
+    <button data-page="laporan">Laporan</button>
+    <button data-page="pengaturan">Pengaturan</button>
+  </nav>
+
+  <main>
+    <!-- KASIR -->
+    <section id="page-kasir" class="page active">
+      <div class="kasir">
+        <div class="catalog">
+          <input id="searchProduct" type="search" placeholder="Cari nama / scan barcode lalu Enter" autocomplete="off">
+          <div id="productGrid" class="grid"></div>
+        </div>
+        <aside class="cart card">
+          <h2>Keranjang</h2>
+          <ul id="cartList" class="cart-list"></ul>
+          <div class="totals">
+            <div class="row"><span>Subtotal</span><span id="cartSubtotal">Rp0</span></div>
+            <label class="row"><span>Diskon (Rp)</span><input id="cartDiscount" type="number" min="0" step="1" value="0" inputmode="numeric"></label>
+            <div class="row total"><span>Total</span><span id="cartTotal">Rp0</span></div>
+            <label class="row"><span>Metode</span>
+              <select id="payMethod"><option>Tunai</option><option>QRIS</option><option>Transfer</option><option>Debit</option></select>
+            </label>
+            <label class="row"><span>Dibayar</span><input id="payAmount" type="number" min="0" step="1" inputmode="numeric" placeholder="0"></label>
+            <div id="quickPay" class="quick"></div>
+            <div class="row"><span>Kembali</span><span id="payChange">Rp0</span></div>
+          </div>
+          <div class="actions">
+            <button id="clearCart" class="secondary">Kosongkan</button>
+            <button id="checkoutBtn" class="primary" disabled>Bayar</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- PRODUK -->
+    <section id="page-produk" class="page">
+      <form id="productForm" class="card form-grid" autocomplete="off">
+        <h2 class="full" id="productFormTitle">Tambah produk</h2>
+        <input type="hidden" name="id">
+        <label>SKU / Barcode<input name="sku"></label>
+        <label>Nama produk *<input name="name" required></label>
+        <label>Kategori<input name="category" list="categoryList"></label>
+        <label>Harga jual (Rp) *<input name="price" type="number" min="0" step="1" required inputmode="numeric"></label>
+        <label>Harga modal (Rp)<input name="cost" type="number" min="0" step="1" inputmode="numeric"></label>
+        <label>Stok awal<input name="stock" type="number" min="0" step="1" inputmode="numeric"></label>
+        <label>Stok minimum<input name="minStock" type="number" min="0" step="1" inputmode="numeric"></label>
+        <div class="form-actions full">
+          <button type="submit" class="primary" id="productSubmit">Simpan produk</button>
+          <button type="button" class="secondary" id="productReset">Batal</button>
+        </div>
+      </form>
+      <datalist id="categoryList"></datalist>
+      <div class="card">
+        <input id="searchInventory" type="search" placeholder="Cari produk / SKU / kategori">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>SKU</th><th>Nama</th><th class="num">Harga</th><th class="num">Modal</th><th class="num">Stok</th><th></th></tr></thead>
+            <tbody id="inventoryBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIWAYAT -->
+    <section id="page-riwayat" class="page">
+      <div class="card">
+        <div class="toolbar">
+          <input type="date" id="historyDate">
+          <button id="historyAll" class="secondary">Semua tanggal</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>No</th><th>Waktu</th><th class="num">Item</th><th class="num">Total</th><th>Metode</th><th></th></tr></thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- LAPORAN -->
+    <section id="page-laporan" class="page">
+      <div class="card toolbar">
+        <select id="reportRange">
+          <option value="today">Hari ini</option>
+          <option value="7d">7 hari terakhir</option>
+          <option value="month">Bulan ini</option>
+          <option value="custom">Custom</option>
+        </select>
+        <input type="date" id="reportFrom" hidden>
+        <input type="date" id="reportTo" hidden>
+        <button id="exportCsv" class="secondary">Export CSV</button>
+      </div>
+      <div id="reportStats" class="stats"></div>
+      <div class="two-col">
+        <div class="card"><h3>Produk terlaris</h3><div class="table-wrap"><table><thead><tr><th>Produk</th><th class="num">Qty</th><th class="num">Omzet</th></tr></thead><tbody id="topProducts"></tbody></table></div></div>
+        <div class="card"><h3>Stok menipis</h3><div class="table-wrap"><table><thead><tr><th>Produk</th><th class="num">Stok</th><th class="num">Min</th></tr></thead><tbody id="lowStock"></tbody></table></div></div>
+      </div>
+      <div class="card">
+        <h3>Pergerakan stok terakhir</h3>
+        <div class="table-wrap"><table><thead><tr><th>Waktu</th><th>Produk</th><th class="num">Qty</th><th>Keterangan</th></tr></thead><tbody id="stockMovesBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- PENGATURAN -->
+    <section id="page-pengaturan" class="page">
+      <form id="settingsForm" class="card form-grid">
+        <h2 class="full">Data toko &amp; struk</h2>
+        <label>Nama toko<input name="storeName"></label>
+        <label>Telepon<input name="phone"></label>
+        <label class="full">Alamat<input name="address"></label>
+        <label class="full">Catatan bawah struk<input name="footer"></label>
+        <label>Lebar kertas
+          <select name="paper"><option value="58">58 mm (32 karakter)</option><option value="80">80 mm (48 karakter)</option></select>
+        </label>
+        <label>Mode cetak
+          <select name="printMode">
+            <option value="raster">Gambar (disarankan, cocok untuk printer murah tipe T02/M02)</option>
+            <option value="text">Teks ESC/POS langsung (printer resi standar)</option>
+          </select>
+        </label>
+        <div class="checks">
+          <label class="check"><input type="checkbox" name="autoPrint"> Cetak otomatis setelah bayar</label>
+          <label class="check"><input type="checkbox" name="autoCut"> Potong kertas otomatis</label>
+        </div>
+        <p class="hint full">Kalo struk keluar kertas kosong tanpa tulisan: printer lo kemungkinan gak punya font internal (umum di printer murah kaya T02/M02) — pastiin Mode cetak di atas "Gambar", bukan "Teks".</p>
+        <div class="form-actions full"><button class="primary" type="submit">Simpan pengaturan</button></div>
+      </form>
+
+      <div class="card">
+        <h2>Printer</h2>
+        <p id="printerStatus">Belum terhubung</p>
+        <div class="form-actions">
+          <button id="connectBT" class="primary">Hubungkan Bluetooth</button>
+          <button id="connectUSB" class="primary">Hubungkan USB</button>
+          <button id="testPrint" class="secondary">Test print</button>
+          <button id="disconnectPrinter" class="secondary">Putuskan</button>
+        </div>
+        <p class="hint">Bluetooth hanya untuk printer BLE. Printer Bluetooth classic: pakai kabel USB (OTG) atau tombol "Cetak via sistem" di struk (butuh app print service seperti RawBT). Koneksi perlu dipilih ulang setiap app dibuka.</p>
+        <div class="form-actions" style="margin-top:8px">
+          <button id="copyLog" class="secondary small">Copy log</button>
+          <button id="clearLog" class="secondary small">Hapus log</button>
+        </div>
+        <pre id="printerLog" class="log-box"></pre>
+      </div>
+
+      <div class="card">
+        <h2>Backup data</h2>
+        <p class="hint">Semua data tersimpan di browser perangkat ini. Export backup rutin (misal tiap tutup toko) supaya aman bila data browser terhapus.</p>
+        <div class="form-actions">
+          <button id="exportBackup" class="primary">Export backup (JSON)</button>
+          <label class="button secondary">Import backup<input type="file" id="importBackup" accept="application/json,.json" hidden></label>
+        </div>
+        <p id="storageInfo" class="hint"></p>
+      </div>
+    </section>
+  </main>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-box">
+      <div id="receiptPreview" class="receipt"></div>
+      <div class="form-actions">
+        <button id="modalPrint" class="primary">Cetak</button>
+        <button id="modalSystemPrint" class="secondary">Cetak via sistem</button>
+        <button id="modalClose" class="secondary">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
