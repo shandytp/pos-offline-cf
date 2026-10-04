@@ -1,6 +1,6 @@
 // Bump this version on every deploy. Chrome only re-checks this file's bytes to detect
 // an update — if nothing here changes, it keeps serving the old cached app forever.
-const CACHE = 'pos-offline-v12';
+const CACHE = 'pos-offline-v13';
 const ASSETS = [
   './',
   './index.html',

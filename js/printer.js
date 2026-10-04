@@ -77,7 +77,13 @@ export async function connectBluetooth() {
     name: device.name || 'Printer Bluetooth',
     device,
     async write(data) {
-      const DELAY = 20;
+      // 20ms used to be here. Confirmed by a clean log (zero errors, zero retries, "berhasil
+      // terkirim") that still printed garbled: Android resolves writeValueWithoutResponse() the
+      // moment the write is QUEUED on the OS's BLE stack, not once it's actually gone out over
+      // the air. Queue faster than the real connection interval drains and Android can silently
+      // drop/reorder bytes — no exception ever reaches JS, which is exactly why every previous
+      // fix (chunk size, retry logic) never touched this: nothing here was ever failing loudly.
+      const DELAY = 50;
       // The thermal head physically prints far slower (a few mm/s) than BLE can push bytes.
       // Without a pause, the printer's small receive buffer overflows mid-job and its firmware
       // drops the BLE connection to protect itself — exactly the "disconnects around byte
