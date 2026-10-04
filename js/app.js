@@ -1,6 +1,6 @@
 import * as db from './db.js';
 import * as printer from './printer.js';
-import { buildReceipt, buildTestReceipt, encodeEscPos, encodeEscPosRaster, renderReceipt, trxNo, fmtDateTime } from './receipt.js';
+import { buildReceipt, buildTestReceipt, encodeEscPos, encodeEscPosRaster, previewRasterPNG, renderReceipt, trxNo, fmtDateTime } from './receipt.js';
 
 const $ = (s) => document.querySelector(s);
 const rp = (n) => 'Rp' + Math.round(n || 0).toLocaleString('id-ID');
@@ -471,6 +471,12 @@ $('#disconnectPrinter').addEventListener('click', () => guard(printer.disconnect
 $('#testPrint').addEventListener('click', () => guard(async () => {
   await printer.print(await encodeForPrint(buildTestReceipt(state.settings)));
   toast('Test print dikirim');
+}));
+$('#previewRaster').addEventListener('click', () => guard(async () => {
+  const img = $('#rasterPreviewImg');
+  img.src = await previewRasterPNG(buildTestReceipt(state.settings), state.settings);
+  img.hidden = false;
+  img.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }));
 
 $('#exportBackup').addEventListener('click', () => guard(async () => {

@@ -155,9 +155,12 @@
           <button id="connectBT" class="primary">Hubungkan Bluetooth</button>
           <button id="connectUSB" class="primary">Hubungkan USB</button>
           <button id="testPrint" class="secondary">Test print</button>
+          <button id="previewRaster" class="secondary">Preview gambar</button>
           <button id="disconnectPrinter" class="secondary">Putuskan</button>
         </div>
         <p class="hint">Bluetooth hanya untuk printer BLE. Printer Bluetooth classic: pakai kabel USB (OTG) atau tombol "Cetak via sistem" di struk (butuh app print service seperti RawBT). Koneksi perlu dipilih ulang setiap app dibuka.</p>
+        <p class="hint"><strong>Preview gambar</strong> nunjukin persis bitmap yang bakal dikirim ke printer — kalo di preview ini udah kelihatan berantakan, masalahnya di render (HP-nya), bukan di printer/Bluetooth.</p>
+        <img id="rasterPreviewImg" alt="Preview gambar struk" hidden>
         <div class="form-actions" style="margin-top:8px">
           <button id="copyLog" class="secondary small">Copy log</button>
           <button id="clearLog" class="secondary small">Hapus log</button>

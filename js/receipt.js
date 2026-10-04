@@ -181,6 +181,14 @@ async function renderToCanvas({ ops, width: chars }, s) {
   return out;
 }
 
+// Lets the app show, on-screen, exactly the bitmap that would be sent to the printer — splits
+// "is the render already broken on this device" from "did the BLE transfer corrupt it", instead
+// of guessing from printed paper alone.
+export async function previewRasterPNG(receipt, s) {
+  const canvas = await renderToCanvas(receipt, s);
+  return canvas.toDataURL('image/png');
+}
+
 export async function encodeEscPosRaster(receipt, s, { cut = false } = {}) {
   const canvas = await renderToCanvas(receipt, s);
   const { width: dotsWidth, height } = canvas;
