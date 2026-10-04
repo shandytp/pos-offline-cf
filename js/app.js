@@ -63,7 +63,7 @@ function showPage(name) {
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === 'page-' + name));
   if (name === 'riwayat') guard(renderHistory);
   if (name === 'laporan') guard(renderReport);
-  if (name === 'pengaturan') guard(renderStorageInfo);
+  if (name === 'pengaturan') { guard(renderStorageInfo); guard(renderVersionInfo); }
 }
 document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => showPage(b.dataset.page)));
 
@@ -500,6 +500,27 @@ async function renderStorageInfo() {
   $('#storageInfo').textContent =
     `Data terpakai: ${(usage / 1024 / 1024).toFixed(2)} MB. Penyimpanan permanen: ${persisted ? 'ya' : 'tidak (browser bisa menghapus data saat memori penuh — rajin backup)'}.`;
 }
+
+// So "udah update apa belum?" has a straight answer instead of guessing from symptoms — shows
+// exactly which cache this device is actually serving from right now, ground truth, not intent.
+async function renderVersionInfo() {
+  const el = $('#versionInfo');
+  if (!('caches' in window)) { el.textContent = 'Browser ini tidak pakai cache offline.'; return; }
+  const keys = await caches.keys();
+  const active = keys.find((k) => k.startsWith('pos-offline-')) || '(belum ada cache)';
+  const reg = await navigator.serviceWorker?.getRegistration();
+  const pending = reg?.waiting ? ' — ada update baru siap, akan aktif otomatis sebentar lagi' : reg?.installing ? ' — lagi download update…' : '';
+  el.textContent = `Cache aktif di perangkat ini: ${active}${pending}`;
+}
+
+$('#checkUpdate').addEventListener('click', () => guard(async () => {
+  const reg = await navigator.serviceWorker?.getRegistration();
+  if (!reg) { toast('Service worker belum terdaftar', true); return; }
+  await reg.update(); // bypass the normal "check at most once a day" throttle, force a check now
+  await new Promise((r) => setTimeout(r, 800));
+  await renderVersionInfo();
+  toast(reg.waiting || reg.installing ? 'Update ditemukan, lagi dipasang…' : 'Sudah versi terbaru');
+}));
 
 /* ---------- Boot ---------- */
 async function init() {
